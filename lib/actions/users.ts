@@ -79,3 +79,34 @@ export async function getUsers() {
 
     return { users }
 }
+
+export async function updateUserRole(userId: string, role: string) {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return { error: 'Clave de servicio no configurada' }
+    }
+
+    const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+            cookies: {
+                get(name: string) { return undefined },
+                set(name: string, value: string, options: CookieOptions) { },
+                remove(name: string, options: CookieOptions) { },
+            },
+        }
+    )
+
+    const { error } = await supabase.auth.admin.updateUserById(
+        userId,
+        { user_metadata: { role } }
+    )
+
+    if (error) {
+        console.error('Error updating user role:', error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/admin/users')
+    return { success: true }
+}

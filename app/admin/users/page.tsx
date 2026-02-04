@@ -1,6 +1,8 @@
 import { Suspense } from "react"
 import { getUsers } from "@/lib/actions/users"
 import { CreateUserModal } from "@/components/admin/users/create-user-modal"
+import { EditUserModal } from "@/components/admin/users/edit-user-modal"
+import { UserRole } from "@/lib/types"
 import {
     Card,
     CardContent,
@@ -47,6 +49,7 @@ export default async function UsersPage() {
                                     <TableHead>Rol</TableHead>
                                     <TableHead>Último Acceso</TableHead>
                                     <TableHead>Creado</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -65,6 +68,13 @@ export default async function UsersPage() {
                                         </TableCell>
                                         <TableCell>
                                             {new Date(user.created_at).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <EditUserModal
+                                                userId={user.id}
+                                                currentRole={(user.user_metadata?.role || 'editor') as UserRole}
+                                                userEmail={user.email || ''}
+                                            />
                                         </TableCell>
                                     </TableRow>
                                 ))}
