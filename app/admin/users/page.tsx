@@ -27,10 +27,6 @@ export default async function UsersPage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    console.log('User accessing /admin/users:', user?.id, user?.email)
-    console.log('User metadata:', user?.user_metadata)
-    console.log('Role check:', user?.user_metadata?.role)
-
     let userRole = user?.user_metadata?.role
 
     if (!userRole && user) {
@@ -44,10 +40,7 @@ export default async function UsersPage() {
         userRole = dbUser?.role
     }
 
-    console.log('Final Role Check:', userRole)
-
     if (userRole !== 'admin' && userRole !== 'superadmin') {
-        console.log('REDIRECTING: Access denied for role', userRole)
         redirect('/admin')
     }
 
