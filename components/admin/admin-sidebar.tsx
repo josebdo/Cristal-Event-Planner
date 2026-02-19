@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -19,12 +20,12 @@ import { useRouter } from "next/navigation"
 import { User } from "@supabase/supabase-js"
 
 const navItems = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ['admin', 'editor'] },
-  { href: "/admin/products", label: "Productos", icon: Package, roles: ['admin', 'editor'] },
-  { href: "/admin/categories", label: "Categorías", icon: Tag, roles: ['admin', 'editor'] },
-  { href: "/admin/promotions", label: "Promociones", icon: Megaphone, roles: ['admin', 'editor'] },
-  { href: "/admin/users", label: "Usuarios", icon: Users, roles: ['admin'] },
-  { href: "/admin/settings", label: "Configuración", icon: Settings, roles: ['admin', 'editor'] },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ['admin', 'editor', 'superadmin'] },
+  { href: "/admin/products", label: "Productos", icon: Package, roles: ['admin', 'editor', 'superadmin'] },
+  { href: "/admin/categories", label: "Categorías", icon: Tag, roles: ['admin', 'editor', 'superadmin'] },
+  { href: "/admin/promotions", label: "Promociones", icon: Megaphone, roles: ['admin', 'editor', 'superadmin'] },
+  { href: "/admin/users", label: "Usuarios", icon: Users, roles: ['admin', 'superadmin'] },
+  { href: "/admin/settings", label: "Configuración", icon: Settings, roles: ['admin', 'editor', 'superadmin'] },
 ]
 
 interface AdminSidebarProps {
@@ -34,7 +35,25 @@ interface AdminSidebarProps {
 export function AdminSidebar({ user }: AdminSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const userRole = user.user_metadata?.role || 'editor' // Default to editor if no role
+  const [userRole, setUserRole] = useState<string>(user.user_metadata?.role || 'editor')
+
+  useEffect(() => {
+    async function fetchRole() {
+      if (!user.user_metadata?.role) {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (data?.role) {
+          setUserRole(data.role)
+        }
+      }
+    }
+    fetchRole()
+  }, [user])
 
   const handleSignOut = async () => {
     const supabase = createClient()

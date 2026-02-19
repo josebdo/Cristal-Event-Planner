@@ -23,7 +23,11 @@ import { Plus, UserPlus } from "lucide-react"
 import { createUser } from "@/lib/actions/users"
 import { useToast } from "@/hooks/use-toast"
 
-export function CreateUserModal() {
+interface CreateUserModalProps {
+    currentUserRole?: string
+}
+
+export function CreateUserModal({ currentUserRole }: CreateUserModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const { toast } = useToast()
@@ -107,6 +111,9 @@ export function CreateUserModal() {
                             <SelectContent>
                                 <SelectItem value="editor">Editor (Sin acceso a usuarios)</SelectItem>
                                 <SelectItem value="admin">Administrador (Acceso total)</SelectItem>
+                                {currentUserRole === 'superadmin' && (
+                                    <SelectItem value="superadmin">Super Admin (Control Total)</SelectItem>
+                                )}
                             </SelectContent>
                         </Select>
                     </div>

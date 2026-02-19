@@ -1,5 +1,7 @@
 import { Suspense } from "react"
 import { getUsers } from "@/lib/actions/users"
+import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 import { CreateUserModal } from "@/components/admin/users/create-user-modal"
 import { EditUserModal } from "@/components/admin/users/edit-user-modal"
 import { UserRole } from "@/lib/types"
@@ -22,13 +24,40 @@ import { Badge } from "@/components/ui/badge"
 import { UserCog } from "lucide-react"
 
 export default async function UsersPage() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    console.log('User accessing /admin/users:', user?.id, user?.email)
+    console.log('User metadata:', user?.user_metadata)
+    console.log('Role check:', user?.user_metadata?.role)
+
+    let userRole = user?.user_metadata?.role
+
+    if (!userRole && user) {
+        // Fallback: Check in the public.users table if not in metadata
+        const { data: dbUser } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', user.id)
+            .single()
+
+        userRole = dbUser?.role
+    }
+
+    console.log('Final Role Check:', userRole)
+
+    if (userRole !== 'admin' && userRole !== 'superadmin') {
+        console.log('REDIRECTING: Access denied for role', userRole)
+        redirect('/admin')
+    }
+
     const { users, error } = await getUsers()
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="font-serif text-3xl font-bold tracking-tight">Usuarios</h1>
-                <CreateUserModal />
+                <CreateUserModal currentUserRole={userRole} />
             </div>
 
             <Card>
@@ -74,6 +103,7 @@ export default async function UsersPage() {
                                                 userId={user.id}
                                                 currentRole={(user.user_metadata?.role || 'editor') as UserRole}
                                                 userEmail={user.email || ''}
+                                                currentUserRole={userRole}
                                             />
                                         </TableCell>
                                     </TableRow>

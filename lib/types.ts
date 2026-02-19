@@ -47,4 +47,4 @@ export interface SiteSetting {
   updated_at: string
 }
 
-export type UserRole = 'admin' | 'editor'
+export type UserRole = 'superadmin' | 'admin' | 'editor'

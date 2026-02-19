@@ -27,9 +27,10 @@ interface EditUserModalProps {
     userId: string
     currentRole: UserRole
     userEmail: string
+    currentUserRole?: string
 }
 
-export function EditUserModal({ userId, currentRole, userEmail }: EditUserModalProps) {
+export function EditUserModal({ userId, currentRole, userEmail, currentUserRole }: EditUserModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [role, setRole] = useState<UserRole>(currentRole)
@@ -98,6 +99,9 @@ export function EditUserModal({ userId, currentRole, userEmail }: EditUserModalP
                             <SelectContent>
                                 <SelectItem value="editor">Editor (Sin acceso a usuarios)</SelectItem>
                                 <SelectItem value="admin">Administrador (Acceso total)</SelectItem>
+                                {(currentUserRole === 'superadmin' || currentRole === 'superadmin') && (
+                                    <SelectItem value="superadmin">Super Admin (Control Total)</SelectItem>
+                                )}
                             </SelectContent>
                         </Select>
                     </div>
