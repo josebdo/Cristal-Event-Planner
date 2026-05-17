@@ -4,58 +4,13 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
-export async function createUser(formData: FormData) {
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-    const role = formData.get('role') as string
-
-    // Verify permissions
-    const supabaseStandard = await createClient()
-    const { data: { user: currentUser } } = await supabaseStandard.auth.getUser()
-
-    // Check metadata role, fallback to DB if needed
-    let currentUserRole = currentUser?.user_metadata?.role
-    if (!currentUserRole && currentUser) {
-        try {
-            // We need a temporary service client to check the DB role if metadata is missing
-            // because the standard client might not have permissions to read public.users depending on RLS
-            if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-                const tempClient = createServerClient(
-                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-                    {
-                        cookies: {
-                            get(name: string) { return undefined },
-                            set(name: string, value: string, options: CookieOptions) { },
-                            remove(name: string, options: CookieOptions) { },
-                        },
-                    }
-                )
-                const { data: dbUser } = await tempClient
-                    .from('users')
-                    .select('role')
-                    .eq('id', currentUser.id)
-                    .single()
-                currentUserRole = dbUser?.role
-            }
-        } catch (e) {
-            console.error("Error fetching fallback role:", e)
-        }
+function getAdminClient() {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        throw new Error('Clave de servicio o URL de Supabase no configuradas')
     }
-
-    // Only superadmin can create superadmins
-    if (role === 'superadmin' && currentUserRole !== 'superadmin') {
-        return { error: 'No tienes permisos para crear un Super Admin' }
-    }
-
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        return { error: 'Clave de servicio no configurada' }
-    }
-
-    // Create a Supabase client with the SERVICE ROLE key
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    return createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
         {
             cookies: {
                 get(name: string) { return undefined },
@@ -64,8 +19,54 @@ export async function createUser(formData: FormData) {
             },
         }
     )
+}
 
-    const { error } = await supabase.auth.admin.createUser({
+async function getCurrentUserRole(supabaseAdmin: ReturnType<typeof getAdminClient>) {
+    const supabaseStandard = await createClient()
+    const { data: { user: currentUser } } = await supabaseStandard.auth.getUser()
+
+    if (!currentUser) return { currentUser: null, role: null }
+
+    let role = currentUser.user_metadata?.role
+
+    if (!role) {
+        try {
+            const { data: dbUser } = await supabaseAdmin
+                .from('users')
+                .select('role')
+                .eq('id', currentUser.id)
+                .single()
+            if (dbUser?.role) {
+                role = dbUser.role
+            }
+        } catch (e) {
+            console.error("Error fetching fallback role:", e)
+        }
+    }
+
+    return { currentUser, role }
+}
+
+export async function createUser(formData: FormData) {
+    const email = formData.get('email') as string
+    const password = formData.get('password') as string
+    const role = formData.get('role') as string
+
+    let supabaseAdmin
+    try {
+        supabaseAdmin = getAdminClient()
+    } catch (e: any) {
+        return { error: e.message }
+    }
+
+    const { role: currentUserRole } = await getCurrentUserRole(supabaseAdmin)
+
+    // Only superadmin can create superadmins
+    if (role === 'superadmin' && currentUserRole !== 'superadmin') {
+        return { error: 'No tienes permisos para crear un Super Admin' }
+    }
+
+    const { data: authData, error } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         user_metadata: { role },
@@ -77,42 +78,33 @@ export async function createUser(formData: FormData) {
         return { error: error.message }
     }
 
+    if (authData?.user) {
+        // Sync to public.users table immediately
+        const { error: dbError } = await supabaseAdmin.from('users').upsert({
+            id: authData.user.id,
+            email: email,
+            role: role,
+            updated_at: new Date().toISOString(),
+        })
+
+        if (dbError) {
+            console.error('Error syncing user to public.users:', dbError)
+        }
+    }
+
     revalidatePath('/admin/users')
     return { success: true }
 }
 
 export async function getUsers() {
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        return { error: 'Clave de servicio no configurada', users: [] }
+    let supabaseAdmin
+    try {
+        supabaseAdmin = getAdminClient()
+    } catch (e: any) {
+        return { error: e.message, users: [] }
     }
 
-    // 1. Get current user to check permissions
-    const supabaseStandard = await createClient()
-    const { data: { user: currentUser } } = await supabaseStandard.auth.getUser()
-
-    let currentUserRole = currentUser?.user_metadata?.role
-
-    // Fallback: Check role in DB if metadata is missing
-    const supabaseAdmin = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        {
-            cookies: {
-                get(name: string) { return undefined },
-                set(name: string, value: string, options: CookieOptions) { },
-                remove(name: string, options: CookieOptions) { },
-            },
-        }
-    )
-
-    if (!currentUserRole && currentUser) {
-        const { data: dbUser } = await supabaseAdmin
-            .from('users')
-            .select('role')
-            .eq('id', currentUser.id)
-            .single()
-        currentUserRole = dbUser?.role
-    }
+    const { role: currentUserRole } = await getCurrentUserRole(supabaseAdmin)
 
     const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers()
 
@@ -121,12 +113,27 @@ export async function getUsers() {
         return { error: error.message, users: [] }
     }
 
+    // Fetch from public.users to ensure perfect sync
+    const { data: dbUsers } = await supabaseAdmin.from('users').select('id, role')
+    const roleMap = new Map(dbUsers?.map((u) => [u.id, u.role]) || [])
+
+    const mergedUsers = users.map((u) => {
+        const metaRole = u.user_metadata?.role
+        const dbRole = roleMap.get(u.id)
+        const actualRole = metaRole || dbRole || 'editor'
+        if (!u.user_metadata) u.user_metadata = {}
+        if (u.user_metadata.role !== actualRole) {
+            u.user_metadata.role = actualRole
+        }
+        return u
+    })
+
     // FILTERING LOGIC
-    let filteredUsers = users
+    let filteredUsers = mergedUsers
 
     if (currentUserRole === 'admin') {
         // Admin cannot see superadmins
-        filteredUsers = users.filter(u => u.user_metadata?.role !== 'superadmin')
+        filteredUsers = mergedUsers.filter((u) => u.user_metadata?.role !== 'superadmin')
     } else if (currentUserRole !== 'superadmin') {
         // Editors or others shouldn't see anyone
         return { users: [] }
@@ -136,51 +143,37 @@ export async function getUsers() {
 }
 
 export async function updateUserRole(userId: string, role: string) {
-    // Verify permissions
-    const supabaseStandard = await createClient()
-    const { data: { user: currentUser } } = await supabaseStandard.auth.getUser()
-
-    // Check role/fallback
-    let currentUserRole = currentUser?.user_metadata?.role
-
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        return { error: 'Clave de servicio no configurada' }
+    let supabaseAdmin
+    try {
+        supabaseAdmin = getAdminClient()
+    } catch (e: any) {
+        return { error: e.message }
     }
 
-    const supabaseAdmin = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        {
-            cookies: {
-                get(name: string) { return undefined },
-                set(name: string, value: string, options: CookieOptions) { },
-                remove(name: string, options: CookieOptions) { },
-            },
-        }
-    )
-
-    if (!currentUserRole && currentUser) {
-        const { data: dbUser } = await supabaseAdmin
-            .from('users')
-            .select('role')
-            .eq('id', currentUser.id)
-            .single()
-        currentUserRole = dbUser?.role
-    }
+    const { role: currentUserRole } = await getCurrentUserRole(supabaseAdmin)
 
     // Only superadmin can assign superadmin role
     if (role === 'superadmin' && currentUserRole !== 'superadmin') {
         return { error: 'No tienes permisos para asignar el rol de Super Admin' }
     }
 
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(
-        userId,
-        { user_metadata: { role } }
-    )
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        user_metadata: { role },
+    })
 
     if (error) {
         console.error('Error updating user role:', error)
         return { error: error.message }
+    }
+
+    // Sync to public.users table
+    const { error: dbError } = await supabaseAdmin
+        .from('users')
+        .update({ role, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+
+    if (dbError) {
+        console.error('Error syncing role to public.users:', dbError)
     }
 
     revalidatePath('/admin/users')

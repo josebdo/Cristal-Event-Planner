@@ -92,9 +92,9 @@ export function ProductForm({ product, categories, promotions }: ProductFormProp
     // PostgreSQL no acepta strings vacíos "" para campos UUID o fechas.
     const dataToSubmit = {
       name: formData.name,
-      description: formData.description || null,
-      image_url: imageUrl || null,
-      price: formData.price ? parseFloat(formData.price.toString()) : null,
+      description: formData.description || "",
+      image_url: imageUrl || "",
+      price: formData.price ? parseFloat(formData.price.toString()) : 0,
       category_id: formData.category_id && formData.category_id !== "" ? formData.category_id : null,
       is_promotion: formData.is_promotion,
       is_active: formData.is_active,

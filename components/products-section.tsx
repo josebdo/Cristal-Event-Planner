@@ -4,7 +4,7 @@ import { useState } from "react"
 import { ProductCard } from "@/components/product-card"
 import { ProductModal } from "@/components/product-modal"
 import type { Category, Product } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
 interface ProductsSectionProps {
   categories?: Category[]
@@ -15,65 +15,57 @@ interface ProductsSectionProps {
 
 export function ProductsSection({ categories = [], products, title = "Nuestros Productos", whatsappNumber }: ProductsSectionProps) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all")
 
-  // We need a way to get the WhatsApp number. Often passed via props or context.
-  // For now let's assume it might be passed or default.
-  // Ideally, the parent page passes `settings` including whatsapp number.
-  // But updating that chain is complex. Let's use a hardcoded fallback or try to read it if updated.
-  // Actually, HeroSection had it. Let's see if we can update ProductsSection props later or now.
-  // For now, let's leave it as optional/default.
+  // Filtrar productos según la categoría seleccionada
+  const filteredProducts = selectedCategoryId === "all"
+    ? products
+    : products.filter((p) => p.category_id === selectedCategoryId)
+
+  // Solo mostrar categorías que tengan al menos un producto activo
+  const activeCategories = categories.filter((cat) =>
+    products.some((p) => p.category_id === cat.id)
+  )
 
   return (
     <section id="productos" className="py-16 md:py-24">
-      <div className="mx-auto max-w-6xl px-4">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12 text-center">
           <h2 className="font-serif text-3xl font-bold text-foreground md:text-4xl">
-            Nuestros Productos
+            {title}
           </h2>
           <p className="mt-3 text-muted-foreground">
             Cada creación está hecha con amor y dedicación
           </p>
         </div>
 
-        {categories.length > 0 ? (
-          categories.map((category, index) => {
-            const categoryProducts = products.filter(
-              (p) => p.category_id === category.id
-            )
-
-            if (categoryProducts.length === 0) return null
-
-            return (
-              <div
-                key={category.id}
-                className={cn("mb-16 last:mb-0", index > 0 && "pt-8")}
+        {/* Pestañas de Filtrado por Categoría */}
+        {activeCategories.length > 0 && (
+          <div className="mb-12 flex flex-wrap items-center justify-center gap-2 border-b border-border/60 pb-6">
+            <Button
+              variant={selectedCategoryId === "all" ? "default" : "ghost"}
+              onClick={() => setSelectedCategoryId("all")}
+              className="rounded-full px-6 transition-all"
+            >
+              Todos los Productos
+            </Button>
+            {activeCategories.map((cat) => (
+              <Button
+                key={cat.id}
+                variant={selectedCategoryId === cat.id ? "default" : "ghost"}
+                onClick={() => setSelectedCategoryId(cat.id)}
+                className="rounded-full px-6 transition-all"
               >
-                <div className="mb-8">
-                  <h3 className="font-serif text-2xl font-semibold text-foreground">
-                    {category.name}
-                  </h3>
-                  {category.description && (
-                    <p className="mt-2 text-muted-foreground">
-                      {category.description}
-                    </p>
-                  )}
-                </div>
+                {cat.name}
+              </Button>
+            ))}
+          </div>
+        )}
 
-                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  {categoryProducts.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      onClick={() => setSelectedProduct(product)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )
-          })
-        ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {products.map((product) => (
+        {/* Unified Product Grid */}
+        {filteredProducts.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 md:gap-8 transition-all duration-500">
+            {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
@@ -81,12 +73,10 @@ export function ProductsSection({ categories = [], products, title = "Nuestros P
               />
             ))}
           </div>
-        )}
-
-        {products.length === 0 && (
-          <div className="py-12 text-center">
-            <p className="text-muted-foreground">
-              Pronto agregaremos productos a nuestro catálogo.
+        ) : (
+          <div className="py-16 text-center bg-card rounded-2xl border border-border shadow-sm">
+            <p className="text-lg text-muted-foreground">
+              No se encontraron productos disponibles en esta categoría.
             </p>
           </div>
         )}
